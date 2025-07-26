@@ -4,6 +4,7 @@ import os
 import flags
 from dotenv import load_dotenv
 import functions.schema_functions
+from functions.call_function import call_function
 
 load_dotenv()
 api_key = os.environ.get("GEMINI_API_KEY")
@@ -73,7 +74,19 @@ def main():
     )
     print("Gemini Response:")
     for function_call_part in response.function_calls:
-        print(f"Calling function: {function_call_part.name}({function_call_part.args})")
+        # print(f"Calling function: {function_call_part.name}({function_call_part.args})")
+        function_call_result = call_function(function_call_part, (flags.Flags.VERBOSE in active_flags))
+        try:
+            # Attempt to access the deeply nested response
+            response_payload = function_call_result.parts[0].function_response.response
+
+            # If successful, print if verbose
+            if (flags.Flags.VERBOSE in active_flags): # You'll need to re-check the verbose flag here
+                print(f"-> {response_payload}")
+
+        except (AttributeError, IndexError) as e:
+            # If any part of the path doesn't exist, raise a fatal exception
+            raise Exception(f"Fatal Error: Unexpected structure in function call result. Original error: {e}")
     if response.text:
         print(response.text)  
     print_tokens(response.usage_metadata.prompt_token_count,response.usage_metadata.candidates_token_count)

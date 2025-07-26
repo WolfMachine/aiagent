@@ -18,7 +18,7 @@ def write_file(working_directory, file_path, content):
         return f'Error: Cannot write to "{file_path}" as it is outside the permitted working directory'
 
     functions_path = os.path.abspath("/home/wolfraven/BootDev/Projects/aiagent/functions")
-    if os.path.commonpath([functions_path, full_path]) == functions_path):
+    if os.path.commonpath([functions_path, full_path]) == functions_path:
         return "Error: Cannot write to functions directory!"
     os.makedirs(os.path.dirname(full_path), exist_ok=True)
 
