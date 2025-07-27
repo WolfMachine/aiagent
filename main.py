@@ -36,6 +36,45 @@ def print_user_prompt(prompt):
 def noop(*args, **kwargs):
     pass
 
+def generate_agent_content(client, system_prompt, messages, print_tokens, active_flags):
+    response = client.models.generate_content(
+            model='gemini-2.0-flash-001',
+            contents=messages,
+            config=genai.types.GenerateContentConfig(
+                tools=[functions.schema_functions.available_functions],
+                system_instruction=system_prompt
+                ),
+    )
+
+    for candidate in response.candidates:
+        messages.append(candidate.content)
+
+    print("Gemini Response:")
+    if response.function_calls:
+        for function_call_part in response.function_calls:
+            # print(f"Calling function: {function_call_part.name}({function_call_part.args})")
+            function_call_result = call_function(function_call_part, (flags.Flags.VERBOSE in active_flags))
+            messages.append(function_call_result)
+            try:
+                # Attempt to access the deeply nested response
+                response_payload = function_call_result.parts[0].function_response.response
+
+                # If successful, print if verbose
+                if (flags.Flags.VERBOSE in active_flags): # You'll need to re-check the verbose flag here
+                    print(f"-> {response_payload}")
+
+            except (AttributeError, IndexError) as e:
+                # If any part of the path doesn't exist, raise a fatal exception
+                raise Exception(f"Fatal Error: Unexpected structure in function call result. Original error: {e}")
+
+    if response.text and not response.function_calls:
+        print(response.text)
+        return response.text # Return the text to signal completion
+
+    print_tokens(response.usage_metadata.prompt_token_count,response.usage_metadata.candidates_token_count)
+    return None # Indicate that no final text response was found
+
+
 def main():
     active_flags = set()
     if len(sys.argv) < 2:
@@ -64,32 +103,13 @@ def main():
     messages = [
             genai.types.Content(role="user", parts=[genai.types.Part(text=user_prompt)]),
     ]
-    response = client.models.generate_content(
-            model='gemini-2.0-flash-001',
-            contents=messages,
-            config=genai.types.GenerateContentConfig(
-                tools=[functions.schema_functions.available_functions],
-                system_instruction=system_prompt
-                ),
-    )
-    print("Gemini Response:")
-    for function_call_part in response.function_calls:
-        # print(f"Calling function: {function_call_part.name}({function_call_part.args})")
-        function_call_result = call_function(function_call_part, (flags.Flags.VERBOSE in active_flags))
+    for n in range(20):
         try:
-            # Attempt to access the deeply nested response
-            response_payload = function_call_result.parts[0].function_response.response
-
-            # If successful, print if verbose
-            if (flags.Flags.VERBOSE in active_flags): # You'll need to re-check the verbose flag here
-                print(f"-> {response_payload}")
-
-        except (AttributeError, IndexError) as e:
-            # If any part of the path doesn't exist, raise a fatal exception
-            raise Exception(f"Fatal Error: Unexpected structure in function call result. Original error: {e}")
-    if response.text:
-        print(response.text)  
-    print_tokens(response.usage_metadata.prompt_token_count,response.usage_metadata.candidates_token_count)
-
+            if generate_agent_content(client, system_prompt, messages, print_tokens, active_flags):
+                break
+        except Exception as e:
+            print(f'ERROR: A Fatal Error has occured "{e}". Exiting...')
+            break
+ 
 if __name__ == "__main__":
     main()
